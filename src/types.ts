@@ -9,3 +9,25 @@ export interface OrderBookSummary {
   min_order_size: string;
   neg_risk: boolean;
 }
+
+export interface EventInfo {
+  id: string;
+  slug: string;
+  title: string;
+  active: boolean;
+  liquidity: number;
+  volume: number;
+  endDate: string;
+  markets: MarketInfo[];
+}
+
+export interface MarketInfo {
+  id: string;
+  slug: string;
+  question: string;
+  yesTokenId: string;
+  noTokenId: string;
+  yesPrice: number;
+  noPrice: number;
+  endDate: string;
+}

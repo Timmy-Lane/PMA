@@ -6,6 +6,7 @@ import {
 } from "@polymarket/clob-client";
 import { Wallet } from "ethers";
 import "dotenv/config";
+import { EventInfo, MarketInfo } from "./types";
 
 const privateKey = process.env.PRIVATE_KEY!;
 const clobHost = "https://clob.polymarket.com";
@@ -24,18 +25,46 @@ export class Poly {
     return new Poly(signer, client);
   }
 
-  public getMarketsBySlug = async (slug: string) => {
+  public getMarketBySlug = async (slug: string): Promise<MarketInfo | null> => {
     const url = `${this.gammaBase}/markets/slug/${encodeURIComponent(slug)}`;
     const resp = await fetch(url);
     if (!resp.ok) {
       console.warn(`getMarketbySlug fail: HTTP ${resp.status}`);
       return null;
     }
+    const json = await resp.json();
+    const market = json.data ?? json;
+
+    const m = market.markets?.[0];
+    if (!m) return null;
+
+    const [yesPrice, noPrice] = JSON.parse(m.outcomePrices).map(Number);
+    const [yesTokenId, noTokenId] = JSON.parse(m.clobTokenIds);
+
+    return {
+      id: m.id,
+      slug: m.slug,
+      question: m.question,
+      yesTokenId,
+      noTokenId,
+      yesPrice,
+      noPrice,
+      endDate: m.endDate,
+    };
+  };
+
+  public getMarketByID = async (id: string): Promise<MarketInfo | null> => {
+    const url = `${this.gammaBase}/markets/${id}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(`getMarketbyID fail: HTTP ${resp.status}`);
+      return null;
+    }
     const data = await resp.json();
     return data;
   };
 
-  public getEventBySlug = async (slug: string) => {
+  public getEventBySlug = async (slug: string): Promise<EventInfo | null> => {
     const url = `${this.gammaBase}/events/slug/${encodeURIComponent(slug)}`;
     const resp = await fetch(url);
     if (!resp.ok) {

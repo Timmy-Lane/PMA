@@ -6,27 +6,45 @@ import {
 } from "@polymarket/clob-client";
 import { Wallet } from "ethers";
 import "dotenv/config";
-import { EventInfo, MarketInfo } from "./types";
+import { BookLevel, EventInfo, MarketInfo } from "./types";
 
 const privateKey = process.env.PRIVATE_KEY!;
 const clobHost = "https://clob.polymarket.com";
+const gammaBase = "https://gamma-api.polymarket.com";
 
 export class Poly {
-  gammaBase = "https://gamma-api.polymarket.com";
-  constructor(public signer: Wallet, public client: ClobClient) {}
+  signer?: Wallet;
+  client?: ClobClient;
+  constructor() {}
 
   static async create() {
-    const signer = new Wallet(privateKey);
+    const self = new Poly();
 
+    const signer = new Wallet(privateKey);
     const base = new ClobClient(clobHost, 137, signer);
     const creds: ApiKeyCreds = await base.createOrDeriveApiKey();
     const client = new ClobClient(clobHost, 137, signer, creds);
 
-    return new Poly(signer, client);
+    self.signer = signer;
+    self.client = client;
+
+    return self;
   }
 
+  public getEvents = async (limit?: number) => {
+    const url = `${gammaBase}/events?limit=${limit}?closed=false`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(`GetEvents fail: HTTP ${resp.status}`);
+      return null;
+    }
+    const json = await resp.json();
+    const data = json.data ?? json;
+    return data;
+  };
+
   public getMarketBySlug = async (slug: string): Promise<MarketInfo | null> => {
-    const url = `${this.gammaBase}/markets/slug/${encodeURIComponent(slug)}`;
+    const url = `${gammaBase}/markets/slug/${encodeURIComponent(slug)}`;
     const resp = await fetch(url);
     if (!resp.ok) {
       console.warn(`getMarketbySlug fail: HTTP ${resp.status}`);
@@ -49,12 +67,11 @@ export class Poly {
       noTokenId,
       yesPrice,
       noPrice,
-      endDate: m.endDate,
     };
   };
 
   public getMarketByID = async (id: string): Promise<MarketInfo | null> => {
-    const url = `${this.gammaBase}/markets/${id}`;
+    const url = `${gammaBase}/markets/${id}`;
     const resp = await fetch(url);
     if (!resp.ok) {
       console.warn(`getMarketbyID fail: HTTP ${resp.status}`);
@@ -65,7 +82,7 @@ export class Poly {
   };
 
   public getEventBySlug = async (slug: string): Promise<EventInfo | null> => {
-    const url = `${this.gammaBase}/events/slug/${encodeURIComponent(slug)}`;
+    const url = `${gammaBase}/events/slug/${encodeURIComponent(slug)}`;
     const resp = await fetch(url);
     if (!resp.ok) {
       console.warn(`getEventbySlug fail: HTTP ${resp.status}`);
@@ -75,20 +92,53 @@ export class Poly {
     return data;
   };
 
+  // public getOrderbook = async (
+  //   tokenID: string
+  // ): Promise<{
+  //   bids: BookLevel[];
+  //   asks: BookLevel[];
+  //   tickSize?: string;
+  //   minOrderSize: string;
+  // }> => {
+  //   const url = `${this.gammaBase}/book`;
+  // };
+
   public makeBet = async (
     tokenID: string,
     price: number,
     size: number,
     side: Side
-  ) => {
+  ): Promise<any> => {
+    if (!this.client) {
+      throw new Error("Initialize Create Function!");
+    }
     const orderArgs = {
       tokenID,
       price,
       size,
       side,
+      negrisk: false,
     };
-    const resp = await this.client.createAndPostOrder(orderArgs);
+    const resp = await this.client!.createAndPostOrder(orderArgs);
     console.log("Order Result: ", resp);
+    return resp;
+  };
+
+  public cancelOrder = async (orderID: string) => {
+    if (!this.client) {
+      throw new Error("Initialize Create Function!");
+    }
+    const resp = await this.client!.cancelOrder({ orderID });
+    console.log(`Order ${orderID} canceled: ${resp}`);
+    return resp;
+  };
+
+  public getActiveOrders = async () => {
+    if (!this.client) {
+      throw new Error("Initialize Create Function!");
+    }
+    const resp = await this.client!.getOpenOrders();
+    console.log(resp);
     return resp;
   };
 }

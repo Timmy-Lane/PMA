@@ -29,4 +29,8 @@ export interface MarketInfo {
   noTokenId: string;
   yesPrice: number;
   noPrice: number;
+  endDate?: string | null;
+  tags?: string[];
+  bestBid?: number;
+  bestAsk?: number;
 }

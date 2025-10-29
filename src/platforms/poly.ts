@@ -1,9 +1,4 @@
-import {
-  ClobClient,
-  OrderType,
-  Side,
-  ApiKeyCreds,
-} from "@polymarket/clob-client";
+import { ClobClient, Side, ApiKeyCreds } from "@polymarket/clob-client";
 import { Wallet } from "ethers";
 import "dotenv/config";
 import { BookLevel, EventInfo, MarketInfo } from "../types";
@@ -14,29 +9,30 @@ const gammaBase = "https://gamma-api.polymarket.com";
 const crypto_tag = 21;
 
 export class Poly {
-  signer?: Wallet;
-  client?: ClobClient;
-  constructor() {}
+  private client?: ClobClient;
+  private initPromise?: Promise<void>;
 
-  static async create() {
-    const self = new Poly();
+  private async initTrade() {
+    if (this.client) return;
+    const key = privateKey;
+    if (!key) throw new Error("There is no private key");
 
-    const signer = new Wallet(privateKey);
-    const base = new ClobClient(clobHost, 137, signer);
-    const creds: ApiKeyCreds = await base.createOrDeriveApiKey();
-    const client = new ClobClient(clobHost, 137, signer, creds);
-
-    self.signer = signer;
-    self.client = client;
-
-    return self;
+    if (!this.initPromise) {
+      this.initPromise = (async () => {
+        const signer = new Wallet(key);
+        const base = new ClobClient(clobHost, 137, signer);
+        const creds: ApiKeyCreds = await base.createOrDeriveApiKey();
+        this.client = new ClobClient(clobHost, 137, signer, creds);
+      })();
+    }
+    await this.initPromise;
   }
 
   public getEvents = async (limit?: number) => {
     const url = `${gammaBase}/events?tag_id=${crypto_tag}?limit=${limit}?closed=false`;
     const resp = await fetch(url);
     if (!resp.ok) {
-      console.warn(`GetEvents fail: HTTP ${resp.status}`);
+      console.warn(`Poly GetEvents fail: HTTP ${resp.status}`);
       return null;
     }
     const json = await resp.json();
@@ -148,9 +144,7 @@ export class Poly {
     size: number,
     side: Side
   ): Promise<any> => {
-    if (!this.client) {
-      throw new Error("Initialize Create Function!");
-    }
+    await this.initTrade();
     const orderArgs = {
       tokenID,
       price,
@@ -159,25 +153,18 @@ export class Poly {
       negrisk: false,
     };
     const resp = await this.client!.createAndPostOrder(orderArgs);
-    console.log("Order Result: ", resp);
     return resp;
   };
 
   public cancelOrder = async (orderID: string) => {
-    if (!this.client) {
-      throw new Error("Initialize Create Function!");
-    }
+    await this.initTrade();
     const resp = await this.client!.cancelOrder({ orderID });
-    console.log(`Order ${orderID} canceled: ${resp}`);
     return resp;
   };
 
   public getActiveOrders = async () => {
-    if (!this.client) {
-      throw new Error("Initialize Create Function!");
-    }
+    await this.initTrade();
     const resp = await this.client!.getOpenOrders();
-    console.log(resp);
     return resp;
   };
 }

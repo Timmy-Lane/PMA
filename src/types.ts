@@ -30,7 +30,6 @@ export interface MarketInfo {
   yesPrice: number;
   noPrice: number;
   endDate?: string | null;
-  tags?: string[];
   bestBid?: number;
   bestAsk?: number;
 }

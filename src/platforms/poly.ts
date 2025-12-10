@@ -1,12 +1,13 @@
 import { ClobClient, Side, ApiKeyCreds } from "@polymarket/clob-client";
 import { Wallet } from "ethers";
 import "dotenv/config";
-import { BookLevel, EventInfo, MarketInfo } from "../types";
+import { BookLevel, EventInfo, MarketInfo, UserTrade, userActivity } from "../types";
 
 const privateKey = process.env.PRIVATE_KEY!;
 const clobHost = "https://clob.polymarket.com";
 const gammaBase = "https://gamma-api.polymarket.com";
 const crypto_tag = 21;
+const dataHost = "https://data-api.polymarket.com";
 
 export class Poly {
   private client?: ClobClient;
@@ -167,4 +168,49 @@ export class Poly {
     const resp = await this.client!.getOpenOrders();
     return resp;
   };
+
+  public getUserTrades = async (user: string, limit: number = 100, ): Promise<UserTrade[] | null> => {
+    const url = `${dataHost}/trades?limit=${limit}&takerOnly=true&user=${user}`
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(`getUserTrades fail: HTTP ${resp.status}`);
+      return null;
+    }
+    const raw = await resp.json();
+    const formatted : UserTrade[] = raw.map((t : any) => {
+      const revenue = t.side === "SELL" 
+        ? t.size * t.price
+        : -(t.size * t.price);
+
+        return {
+          userName: t.name,
+          userAddress: t.proxyWallet,
+          eventTitle: t.title,
+          eventId: t.slug,   // ? conditionId
+          outcome: t.outcome,
+          side: t.side,
+          size: t.size,
+          price: t.price,
+          revenue,
+          timestamp: t.timestamp,
+          txHash: t.transactionHash,
+        }
+    })
+    return formatted
+  }
+
+  public getUserActivity = async (user: string, limit: number = 100): Promise<userActivity[] | null> => {
+    const url = `${dataHost}/activity?limit=${limit}&user=${user}`
+    const resp = await fetch(url)
+    if (!resp.ok) {
+      console.warn(`getUserTrades fail: HTTP ${resp.status}`);
+      return null;
+    }
+    const raw = await resp.json();
+    const formatted: userActivity[] = raw.map((t: any) => {
+
+    })
+
+    return formatted
+  }
 }

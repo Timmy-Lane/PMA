@@ -33,3 +33,21 @@ export interface MarketInfo {
   bestBid?: number;
   bestAsk?: number;
 }
+
+export interface UserTrade{
+  userName: string;
+  userAddress: string;
+  eventTitle: string;
+  eventId: string;
+  outcome: string;
+  side: 'BUY' | 'SELL'
+  size: number;
+  price: number;
+  revenue: number;
+  timestamp: number;
+  txHash: string;
+}
+
+export interface userActivity{
+  
+}

@@ -48,6 +48,42 @@ export interface UserTrade{
   txHash: string;
 }
 
-export interface userActivity{
+export interface UserActivity{
+  userName: string;
+  userAddress: string;
+  eventTitle: string;
+  eventId: string;
+  outcome: string;
+  side?: 'BUY' | 'SELL'
   
+}
+
+export interface UserPositions{
+  userName: string;
+  userAddress: string;
+  eventTitle: string;
+  eventId: string;
+  outcome: string;
+  shares: number;
+  averageEntryPrice: number;
+  currentPrice: number;
+  unrealizedPnl: number;
+  timestamp: number;
+}
+
+export interface UserTradeHistory{
+  userName: string;
+  userAddress: string;
+  eventTitle: string;
+  eventId: string;
+  outcome: string;
+  totalBuySize: number;
+  totalBuyCost: number;
+  totalSellPrice: number;
+  totalSellProceeds: number;
+  realizedPnl: number;
+  averageEntryPrice: number;
+  averageExitPrice: number;
+  closedAt: number;
+  txHash?: string; 
 }

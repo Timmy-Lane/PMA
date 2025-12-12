@@ -279,20 +279,18 @@ export class Poly {
       }
       const raw = await resp.json()
       const formatted: UserTradeHistory[] = raw.map((t: any) => ({
-         userName: t.name,
          userAddress: t.proxyWallet,
          eventTitle: t.title,
          eventId: t.slug,
          outcome: t.outcome,
-         totalBuySize: t.buySize,
-         totalBuyCost: t.buyCost,
-         totalSellSize: t.sellSize,
-         totalSellProceeds: t.sellProceeds,
+         oppositeOutcome: t.oppositeOutcome,
+         avgEntryPrice: t.avgPrice,
+         totalBought: t.totalBought,
          realizedPnl: t.realizedPnl,
-         averageEntryPrice: t.avgBuyPrice,
-         averageExitPrice: t.avgSellPrice,
-         closedAt: t.timestamp,
-         txHash: t.transactionHash,
+         closePrice: t.curPrice,
+         timestamp: t.timestamp,
+         endDate: t.endDate,
+         icon: t.icon,
       }))
       return formatted
    }

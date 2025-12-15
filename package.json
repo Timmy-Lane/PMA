@@ -3,8 +3,12 @@
    "version": "1.0.0",
    "main": "index.js",
    "scripts": {
-      "start": "ts-node main.ts",
-      "test": "ts-node test/test.ts"
+      "dev": "bun run ./main.ts",
+      "build": "bun build ./main.ts --outdir dist",
+      "start": "bun ./main.js",
+      "db:generate": "drizzle-kit generate",
+      "db:migrate": "drizzle-kit migrate",
+      "db:studio": "drizzle-kit studio"
    },
    "keywords": [],
    "author": "",

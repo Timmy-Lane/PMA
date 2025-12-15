@@ -8,3 +8,4 @@ drizzle/meta/
 .DS_Store
 dist/
 build/
+bun.lockb

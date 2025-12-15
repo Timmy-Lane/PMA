@@ -1,18 +1,18 @@
 {
-  "compilerOptions": {
-    "moduleResolution": "Node16",
-    "module": "Node16",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "noUnusedParameters": false,
-    "skipLibCheck": true,
-    "target": "ES2022",
-    "rootDir": "./",
-    "outDir": "./dist"
-  },
-  "include": ["./**/*.ts"],
-  "exclude": ["node_modules"]
+   "compilerOptions": {
+      "target": "es2022",
+      "moduleResolution": "bundler",
+      "module": "esnext",
+      "allowImportingTsExtensions": true,
+      "noEmit": true,
+      "esModuleInterop": true,
+      "resolveJsonModule": true,
+      "forceConsistentCasingInFileNames": true,
+      "strict": true,
+      "noUnusedParameters": false,
+      "skipLibCheck": true,
+      "rootDir": "./",
+      "outDir": "./dist"
+   },
+   "include": ["./**/*.ts", "src"]
 }

@@ -1,6 +1,6 @@
-FROM node:20-alpine
+FROM node:22
 
-WORKDIR /   
+WORKDIR /pma 
 
 COPY package*.json ./
 RUN npm install

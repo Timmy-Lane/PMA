@@ -1,6 +1,5 @@
 import { ClobClient, Side, ApiKeyCreds } from '@polymarket/clob-client'
 import { Wallet } from 'ethers'
-import 'dotenv/config'
 import {
    BookLevel,
    EventInfo,

@@ -2,26 +2,28 @@ import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import ExcelJS from 'exceljs'
-import { Poly } from '../src/platforms/poly'
+import { Poly } from './platforms/poly'
 import {
    UserActivity,
    UserPositions,
    UserTrade,
    UserTradeHistory,
-} from '../src/types'
+} from './types'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const dataDir = path.resolve(__dirname, '../data')
+const defaultUserAddress = '0xe00740bce98a594e26861838885ab310ec3b548c'
 
-export const exportUserData = async (userAddress: string) => {
+export const exportUserData = async (userAddress: string, limit: number) => {
    const poly = new Poly()
 
    const [trades, activity, openPositions, closedPositions] = await Promise.all(
       [
-         poly.getUserTrades(userAddress),
-         poly.getUserActivity(userAddress),
-         poly.getUserPositions(userAddress),
-         poly.getUserTradeHistory(userAddress),
+         poly.getUserTrades(userAddress, limit),
+         poly.getUserActivity(userAddress, limit),
+         poly.getUserPositions(userAddress, limit),
+         poly.getUserTradeHistory(userAddress, limit),
       ],
    )
 
@@ -32,27 +34,48 @@ export const exportUserData = async (userAddress: string) => {
       closedPositions ?? [],
    )
 
+   const humanView = buildHumanView({
+      closedPositions: closedPositionsData,
+      openPositions: openPositionsData,
+      trades: tradesData,
+      activity: activityData,
+   })
+
+   const llmView = buildLlmView({
+      closedPositions: closedPositionsData,
+      openPositions: openPositionsData,
+      trades: tradesData,
+      activity: activityData,
+   })
+
    await ensureDataDir()
 
-   await Promise.all([
+   const [xlsxPath, jsonPath] = await Promise.all([
       writeWorkbook({
          userAddress,
-         closedPositions: closedPositionsData,
-         openPositions: openPositionsData,
-         trades: tradesData,
+         closedPositions: humanView.closedPositions,
+         openPositions: humanView.openPositions,
+         trades: humanView.trades,
       }),
       writeJson({
          userAddress,
-         closedPositions: closedPositionsData,
-         openPositions: openPositionsData,
-         trades: tradesData,
-         activity: activityData,
+         humanView,
+         llmView,
       }),
    ])
+
+   return {
+      closedPositions: closedPositionsData,
+      openPositions: openPositionsData,
+      trades: tradesData,
+      activity: activityData,
+      xlsxPath,
+      jsonPath,
+   }
 }
 
 const ensureDataDir = async () => {
-   await fs.mkdir(__dirname, { recursive: true })
+   await fs.mkdir(dataDir, { recursive: true })
 }
 
 const sortClosedPositions = (
@@ -73,6 +96,181 @@ const toSortValue = (position: UserTradeHistory): number => {
    return position.timestamp ?? 0
 }
 
+const computeRoi = (position: UserTradeHistory) => {
+   const basis = position.avgEntryPrice * position.totalBought
+   if (basis === 0) return 0
+   return position.realizedPnl / basis
+}
+
+const computeUnrealizedRoi = (position: UserPositions) => {
+   const basis = position.averageEntryPrice * position.shares
+   if (basis === 0) return 0
+   return position.unrealizedPnl / basis
+}
+
+const buildHumanView = ({
+   closedPositions,
+   openPositions,
+   trades,
+   activity,
+}: {
+   closedPositions: UserTradeHistory[]
+   openPositions: UserPositions[]
+   trades: UserTrade[]
+   activity: UserActivity[]
+}) => ({
+   closedPositions: closedPositions.map(projectClosedPositionHuman),
+   openPositions: openPositions.map(projectOpenPositionHuman),
+   trades: trades.map(projectTradeHuman),
+   activity: activity.map(projectActivityHuman),
+})
+
+const buildLlmView = ({
+   closedPositions,
+   openPositions,
+   trades,
+   activity,
+}: {
+   closedPositions: UserTradeHistory[]
+   openPositions: UserPositions[]
+   trades: UserTrade[]
+   activity: UserActivity[]
+}) => ({
+   closedPositions: closedPositions.map(projectClosedPositionLlm),
+   openPositions: openPositions.map(projectOpenPositionLlm),
+   trades: trades.map(projectTradeLlm),
+   activity: activity.map(projectActivityLlm),
+})
+
+const projectClosedPositionHuman = (position: UserTradeHistory) => {
+   const roi = computeRoi(position)
+
+   return {
+      endDate: position.endDate,
+      eventTitle: position.eventTitle,
+      outcome: position.outcome,
+      avgEntryPrice: position.avgEntryPrice,
+      totalBought: position.totalBought,
+      closePrice: position.closePrice,
+      realizedPnl: position.realizedPnl,
+      roiPct: Number((roi * 100).toFixed(2)),
+      result:
+         position.realizedPnl > 0
+            ? 'WIN'
+            : position.realizedPnl < 0
+            ? 'LOSE'
+            : 'EVEN',
+   }
+}
+
+const projectClosedPositionLlm = (position: UserTradeHistory) => {
+   const roi = computeRoi(position)
+
+   return {
+      eventId: position.eventId,
+      eventTitle: position.eventTitle,
+      outcome: position.outcome,
+      avgEntryPrice: position.avgEntryPrice,
+      totalBought: position.totalBought,
+      closePrice: position.closePrice,
+      realizedPnl: position.realizedPnl,
+      roi,
+      timestamp: position.timestamp,
+      endDate: position.endDate,
+      userAddress: position.userAddress,
+      result:
+         position.realizedPnl > 0
+            ? 'WIN'
+            : position.realizedPnl < 0
+            ? 'LOSE'
+            : 'EVEN',
+   }
+}
+
+const projectOpenPositionHuman = (position: UserPositions) => {
+   const unrealizedRoi = computeUnrealizedRoi(position)
+
+   return {
+      timestamp: position.timestamp,
+      eventTitle: position.eventTitle,
+      outcome: position.outcome,
+      shares: position.shares,
+      averageEntryPrice: position.averageEntryPrice,
+      currentPrice: position.currentPrice,
+      unrealizedPnl: position.unrealizedPnl,
+      unrealizedRoiPct: Number((unrealizedRoi * 100).toFixed(2)),
+   }
+}
+
+const projectOpenPositionLlm = (position: UserPositions) => {
+   const unrealizedRoi = computeUnrealizedRoi(position)
+   const basis = position.averageEntryPrice * position.shares
+   const markValue = position.currentPrice * position.shares
+
+   return {
+      eventId: position.eventId,
+      eventTitle: position.eventTitle,
+      outcome: position.outcome,
+      shares: position.shares,
+      averageEntryPrice: position.averageEntryPrice,
+      currentPrice: position.currentPrice,
+      basis,
+      markValue,
+      unrealizedPnl: position.unrealizedPnl,
+      unrealizedRoi,
+      timestamp: position.timestamp,
+      userAddress: position.userAddress,
+   }
+}
+
+const projectTradeHuman = (trade: UserTrade) => ({
+   timestamp: trade.timestamp,
+   eventTitle: trade.eventTitle,
+   outcome: trade.outcome,
+   side: trade.side,
+   size: trade.size,
+   price: trade.price,
+   revenue: trade.revenue,
+   txHash: trade.txHash,
+})
+
+const projectTradeLlm = (trade: UserTrade) => ({
+   eventId: trade.eventId,
+   eventTitle: trade.eventTitle,
+   outcome: trade.outcome,
+   side: trade.side,
+   size: trade.size,
+   price: trade.price,
+   revenue: trade.revenue,
+   timestamp: trade.timestamp,
+   txHash: trade.txHash,
+   userAddress: trade.userAddress,
+})
+
+const projectActivityHuman = (activity: UserActivity) => ({
+   timestamp: activity.timestamp,
+   eventTitle: activity.eventTitle,
+   outcome: activity.outcome,
+   side: activity.side,
+   size: activity.size,
+   usdcSize: activity.usdcSize,
+   price: activity.price,
+   txHash: activity.txHash,
+})
+
+const projectActivityLlm = (activity: UserActivity) => ({
+   eventId: activity.eventId,
+   eventTitle: activity.eventTitle,
+   outcome: activity.outcome,
+   side: activity.side,
+   size: activity.size,
+   usdcSize: activity.usdcSize,
+   price: activity.price,
+   timestamp: activity.timestamp,
+   txHash: activity.txHash,
+   userAddress: activity.userAddress,
+})
+
 const writeWorkbook = async ({
    userAddress,
    closedPositions,
@@ -80,107 +278,76 @@ const writeWorkbook = async ({
    trades,
 }: {
    userAddress: string
-   closedPositions: UserTradeHistory[]
-   openPositions: UserPositions[]
-   trades: UserTrade[]
+   closedPositions: ReturnType<typeof projectClosedPositionHuman>[]
+   openPositions: ReturnType<typeof projectOpenPositionHuman>[]
+   trades: ReturnType<typeof projectTradeHuman>[]
 }) => {
    const workbook = new ExcelJS.Workbook()
 
    const closedSheet = workbook.addWorksheet('ClosedPositions')
    closedSheet.columns = [
-      { header: 'endDate', key: 'endDate', width: 22 },
-      { header: 'eventTitle', key: 'eventTitle', width: 30 },
-      { header: 'eventId', key: 'eventId', width: 24 },
-      { header: 'outcome', key: 'outcome', width: 16 },
-      { header: 'avgEntryPrice', key: 'avgEntryPrice', width: 16 },
-      { header: 'totalBought', key: 'totalBought', width: 14 },
-      { header: 'closePrice', key: 'closePrice', width: 14 },
-      { header: 'realizedPnl', key: 'realizedPnl', width: 14 },
-      { header: 'roiPct', key: 'roiPct', width: 12 },
-      { header: 'result', key: 'result', width: 10 },
-      { header: 'userAddress', key: 'userAddress', width: 46 },
+      { header: 'End Date', key: 'endDate', width: 22 },
+      { header: 'Event', key: 'eventTitle', width: 36 },
+      { header: 'Outcome', key: 'outcome', width: 16 },
+      { header: 'Avg Entry', key: 'avgEntryPrice', width: 12 },
+      { header: 'Size', key: 'totalBought', width: 10 },
+      { header: 'Exit Price', key: 'closePrice', width: 12 },
+      { header: 'PnL', key: 'realizedPnl', width: 12 },
+      { header: 'ROI %', key: 'roiPct', width: 10 },
+      { header: 'Result', key: 'result', width: 10 },
    ]
-
-   closedPositions.forEach((position) => {
-      const roiPct = computeRoi(position)
-      const result = position.realizedPnl > 0 ? 'WIN' : 'LOSE'
-      closedSheet.addRow({
-         ...position,
-         roiPct,
-         result,
-         userAddress,
-      })
-   })
+   closedSheet.addRows(closedPositions)
 
    const openSheet = workbook.addWorksheet('OpenPositions')
    openSheet.columns = [
-      { header: 'timestamp', key: 'timestamp', width: 20 },
-      { header: 'eventTitle', key: 'eventTitle', width: 30 },
-      { header: 'eventId', key: 'eventId', width: 24 },
-      { header: 'outcome', key: 'outcome', width: 16 },
-      { header: 'shares', key: 'shares', width: 14 },
-      { header: 'averageEntryPrice', key: 'averageEntryPrice', width: 18 },
-      { header: 'currentPrice', key: 'currentPrice', width: 14 },
-      { header: 'unrealizedPnl', key: 'unrealizedPnl', width: 16 },
-      { header: 'userAddress', key: 'userAddress', width: 46 },
+      { header: 'Timestamp', key: 'timestamp', width: 20 },
+      { header: 'Event', key: 'eventTitle', width: 36 },
+      { header: 'Outcome', key: 'outcome', width: 16 },
+      { header: 'Shares', key: 'shares', width: 12 },
+      { header: 'Avg Entry', key: 'averageEntryPrice', width: 12 },
+      { header: 'Mark', key: 'currentPrice', width: 10 },
+      { header: 'Unrealized', key: 'unrealizedPnl', width: 12 },
+      { header: 'Unrealized ROI %', key: 'unrealizedRoiPct', width: 16 },
    ]
-
-   openPositions.forEach((position) => {
-      openSheet.addRow({ ...position, userAddress })
-   })
+   openSheet.addRows(openPositions)
 
    const tradesSheet = workbook.addWorksheet('Trades')
    tradesSheet.columns = [
-      { header: 'timestamp', key: 'timestamp', width: 20 },
-      { header: 'eventTitle', key: 'eventTitle', width: 30 },
-      { header: 'eventId', key: 'eventId', width: 24 },
-      { header: 'outcome', key: 'outcome', width: 16 },
-      { header: 'side', key: 'side', width: 10 },
-      { header: 'size', key: 'size', width: 12 },
-      { header: 'price', key: 'price', width: 12 },
-      { header: 'revenue', key: 'revenue', width: 16 },
-      { header: 'txHash', key: 'txHash', width: 50 },
-      { header: 'userAddress', key: 'userAddress', width: 46 },
+      { header: 'Timestamp', key: 'timestamp', width: 20 },
+      { header: 'Event', key: 'eventTitle', width: 36 },
+      { header: 'Outcome', key: 'outcome', width: 16 },
+      { header: 'Side', key: 'side', width: 10 },
+      { header: 'Size', key: 'size', width: 12 },
+      { header: 'Price', key: 'price', width: 12 },
+      { header: 'Revenue', key: 'revenue', width: 14 },
+      { header: 'Tx Hash', key: 'txHash', width: 60 },
    ]
+   tradesSheet.addRows(trades)
 
-   trades.forEach((trade) => {
-      tradesSheet.addRow({ ...trade, userAddress })
-   })
-
-   const xlsxPath = path.join(__dirname, `${userAddress}.xlsx`)
+   const xlsxPath = path.join(dataDir, `${userAddress}.xlsx`)
    await workbook.xlsx.writeFile(xlsxPath)
+   return xlsxPath
 }
 
 const writeJson = async ({
    userAddress,
-   closedPositions,
-   openPositions,
-   trades,
-   activity,
+   humanView,
+   llmView,
 }: {
    userAddress: string
-   closedPositions: UserTradeHistory[]
-   openPositions: UserPositions[]
-   trades: UserTrade[]
-   activity: UserActivity[]
+   humanView: ReturnType<typeof buildHumanView>
+   llmView: ReturnType<typeof buildLlmView>
 }) => {
    const payload = {
       userAddress,
       generatedAt: new Date().toISOString(),
-      closedPositions,
-      openPositions,
-      trades,
-      activity,
+      humanView,
+      llmView,
    }
 
-   const jsonPath = path.join(__dirname, `${userAddress}.json`)
+   const jsonPath = path.join(dataDir, `${userAddress}.json`)
    await fs.writeFile(jsonPath, JSON.stringify(payload, null, 2), 'utf-8')
-}
-
-const computeRoi = (position: UserTradeHistory) => {
-   const basis = position.avgEntryPrice * position.totalBought
-   if (basis === 0) return 0
-   return position.realizedPnl / basis
+   return jsonPath
 }
 
 const isDirectExecution = () => {
@@ -189,15 +356,26 @@ const isDirectExecution = () => {
    return path.resolve(executedPath) === __filename
 }
 
-if (isDirectExecution()) {
-   const userAddress = process.argv[2]
-   if (!userAddress) {
-      console.error('Usage: ts-node exportUserData.ts <userAddress>')
-      process.exit(1)
-   }
+const sumRealizedPnl = (positions: UserTradeHistory[]) =>
+   positions.reduce((total, position) => total + position.realizedPnl, 0)
 
-   exportUserData(userAddress).catch((err) => {
-      console.error('Failed to export user data:', err)
-      process.exit(1)
-   })
+if (isDirectExecution()) {
+   const userAddress = process.argv[2] ?? defaultUserAddress
+
+   exportUserData(userAddress, 100)
+      .then(({ closedPositions, openPositions, jsonPath, xlsxPath }) => {
+         const totalRealizedPnl = sumRealizedPnl(closedPositions)
+         console.log('Export complete')
+         console.log(`User: ${userAddress}`)
+         console.log(
+            `Closed positions: ${closedPositions.length}, Open positions: ${openPositions.length}`,
+         )
+         console.log(`Total realized PnL: ${totalRealizedPnl}`)
+         console.log(`JSON written to: ${jsonPath}`)
+         console.log(`XLSX written to: ${xlsxPath}`)
+      })
+      .catch((err) => {
+         console.error('Failed to export user data:', err)
+         process.exit(1)
+      })
 }
